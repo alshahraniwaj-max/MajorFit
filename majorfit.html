@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MajorFit — Personality × Major</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { font-family: 'DM Sans', sans-serif; }
+  .serif { font-family: 'DM Serif Display', serif; }
+  body { background: #0C0C14; color: #E8E6F0; min-height: 100vh; }
+
+  /* Orb background */
+  .orb {
+    position: fixed; border-radius: 50%; filter: blur(90px); pointer-events: none; z-index: 0;
+  }
+  .orb-1 { width: 500px; height: 500px; background: rgba(88, 56, 180, 0.18); top: -120px; left: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: rgba(147, 51, 234, 0.12); bottom: 50px; right: -80px; }
+  .orb-3 { width: 300px; height: 300px; background: rgba(59, 130, 246, 0.08); top: 40%; left: 50%; transform: translateX(-50%); }
+
+  .glass {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(12px);
+  }
+
+  .glass-strong {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(20px);
+  }
+
+  /* Custom select */
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b7cf8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  select:focus { outline: none; border-color: rgba(139,124,248,0.6); box-shadow: 0 0 0 3px rgba(139,124,248,0.15); }
+  select option { background: #1a1a2e; color: #e8e6f0; }
+
+  /* Predict button */
+  .btn-predict {
+    background: linear-gradient(135deg, #6d42e8, #9333ea);
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-predict::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, #7c55f0, #a855f7);
+    opacity: 0; transition: opacity 0.25s;
+  }
+  .btn-predict:hover::before { opacity: 1; }
+  .btn-predict:active { transform: scale(0.98); }
+  .btn-predict span { position: relative; z-index: 1; }
+
+  /* Result animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(139,124,248,0.4); }
+    70% { box-shadow: 0 0 0 20px rgba(139,124,248,0); }
+    100% { box-shadow: 0 0 0 0 rgba(139,124,248,0); }
+  }
+  .fade-up { animation: fadeUp 0.5s ease forwards; }
+  .pulse-ring { animation: pulse-ring 1.5s ease-out 0.3s; }
+
+  /* Nav */
+  .nav-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
+  .nav-btn.active { border-bottom-color: #8b7cf8; color: #c4b5fd; }
+
+  /* Step indicator */
+  .step-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); transition: background 0.3s;
+  }
+  .step-dot.filled { background: #8b7cf8; }
+
+  /* Loading dots */
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #8b7cf8; margin: 0 3px; }
+  .dot:nth-child(1) { animation: bounce 1.2s infinite 0s; }
+  .dot:nth-child(2) { animation: bounce 1.2s infinite 0.2s; }
+  .dot:nth-child(3) { animation: bounce 1.2s infinite 0.4s; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(139,124,248,0.3); border-radius: 3px; }
+
+  /* Page transitions */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Step groups */
+  .step-group { display: none; }
+  .step-group.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Background orbs -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="relative z-10 min-h-screen flex flex-col">
+
+  <!-- Nav -->
+  <nav class="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-sm font-bold">M</div>
+      <span class="font-semibold text-white text-lg tracking-tight">MajorFit</span>
+    </div>
+    <div class="flex items-center gap-1">
+      <button class="nav-btn active px-4 py-1.5 text-sm text-gray-300 rounded-md" onclick="showPage('home', this)">Home</button>
+      <button class="nav-btn px-4 py-1.5 text-sm text-gray-300 rounded-md" onclick="showPage('predict', this)">Predict</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 max-w-3xl mx-auto w-full px-4 py-12">
+
+    <!-- HOME PAGE -->
+    <div id="page-home" class="page active">
+      <!-- Hero -->
+      <div class="text-center mb-16 mt-4">
+        <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs text-purple-300 font-medium mb-6">
+          <span class="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block"></span>
+          ML-Powered Academic Advisor
+        </div>
+        <h1 class="serif text-6xl md:text-7xl text-white mb-4 leading-tight">
+          Does your major<br/><em class="text-violet-400">fit</em> your mind?
+        </h1>
+        <p class="text-gray-400 text-lg max-w-md mx-auto leading-relaxed">
+          Answer 10 questions. Our model analyzes your personality traits and predicts your compatibility with your academic major.
+        </p>
+        <button onclick="showPage('predict', document.querySelectorAll('.nav-btn')[1])" class="btn-predict mt-8 px-8 py-3.5 rounded-xl text-white font-medium text-sm inline-flex items-center gap-2">
+          <span>Start the prediction</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+      </div>
+
+      <!-- Feature cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+        <div class="glass rounded-2xl p-5">
+          <div class="w-10 h-10 rounded-xl bg-violet-900/50 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b7cf8" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h3 class="text-white font-medium text-sm mb-1">Personality Match</h3>
+          <p class="text-gray-500 text-xs leading-relaxed">Analyzes your personality type against major requirements</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="w-10 h-10 rounded-xl bg-violet-900/50 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b7cf8" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <h3 class="text-white font-medium text-sm mb-1">10 Questions</h3>
+          <p class="text-gray-500 text-xs leading-relaxed">Quick, thoughtful questions spanning key compatibility factors</p>
+        </div>
+        <div class="glass rounded-2xl p-5">
+          <div class="w-10 h-10 rounded-xl bg-violet-900/50 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b7cf8" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <h3 class="text-white font-medium text-sm mb-1">Instant Result</h3>
+          <p class="text-gray-500 text-xs leading-relaxed">Get Suitable / Neutral / Not Suitable with an explanation</p>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="glass-strong rounded-3xl p-8">
+        <h2 class="text-white font-semibold text-lg mb-6">How it works</h2>
+        <div class="space-y-4">
+          <div class="flex items-start gap-4">
+            <div class="w-7 h-7 rounded-lg bg-violet-600/30 flex items-center justify-center flex-shrink-0 text-violet-300 text-xs font-bold">1</div>
+            <div>
+              <p class="text-white text-sm font-medium">Answer the questionnaire</p>
+              <p class="text-gray-500 text-xs mt-0.5">Share your field, personality, learning style, and future goals</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-7 h-7 rounded-lg bg-violet-600/30 flex items-center justify-center flex-shrink-0 text-violet-300 text-xs font-bold">2</div>
+            <div>
+              <p class="text-white text-sm font-medium">Model analyzes your profile</p>
+              <p class="text-gray-500 text-xs mt-0.5">Our Random Forest classifier processes your responses</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-7 h-7 rounded-lg bg-violet-600/30 flex items-center justify-center flex-shrink-0 text-violet-300 text-xs font-bold">3</div>
+            <div>
+              <p class="text-white text-sm font-medium">Receive your compatibility score</p>
+              <p class="text-gray-500 text-xs mt-0.5">Get a clear result with personalized insights</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PREDICTION PAGE -->
+    <div id="page-predict" class="page">
+      <div class="mb-8">
+        <h2 class="serif text-4xl text-white mb-2">Your Profile</h2>
+        <p class="text-gray-400 text-sm">Answer all 10 questions honestly for the best result.</p>
+      </div>
+
+      <!-- Progress -->
+      <div class="flex items-center gap-1.5 mb-8">
+        <div id="dot-0" class="step-dot filled"></div>
+        <div id="dot-1" class="step-dot filled"></div>
+        <div id="dot-2" class="step-dot"></div>
+        <div id="dot-3" class="step-dot"></div>
+        <div id="dot-4" class="step-dot"></div>
+        <div id="dot-5" class="step-dot"></div>
+        <div id="dot-6" class="step-dot"></div>
+        <div id="dot-7" class="step-dot"></div>
+        <div id="dot-8" class="step-dot"></div>
+        <div id="dot-9" class="step-dot"></div>
+        <span class="text-gray-500 text-xs ml-2" id="progress-text">Step 1 of 5</span>
+      </div>
+
+      <!-- Form steps -->
+      <form id="predict-form">
+
+        <!-- Step 1: Academic Background -->
+        <div class="step-group active" id="step-0">
+          <div class="glass-strong rounded-3xl p-7 space-y-5">
+            <h3 class="text-violet-300 text-xs font-semibold uppercase tracking-widest">Academic Background</h3>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Field of study</label>
+              <select name="field_of_study" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Health</option>
+                <option value="1">Technology</option>
+                <option value="2">Business / Management</option>
+                <option value="3">Humanities</option>
+                <option value="4">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Academic year</label>
+              <select name="academic_year" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">First year</option>
+                <option value="1">Second year</option>
+                <option value="2">Third year</option>
+                <option value="3">Fourth year or above</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-end mt-4">
+            <button type="button" onclick="nextStep(1)" class="btn-predict px-6 py-2.5 rounded-xl text-white text-sm font-medium inline-flex items-center gap-2">
+              <span>Next</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Personality & Work Style -->
+        <div class="step-group" id="step-1">
+          <div class="glass-strong rounded-3xl p-7 space-y-5">
+            <h3 class="text-violet-300 text-xs font-semibold uppercase tracking-widest">Personality & Work Style</h3>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">How would you describe yourself?</label>
+              <select name="personality" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Organized and structured</option>
+                <option value="1">Creative and spontaneous</option>
+                <option value="2">Analytical and logical</option>
+                <option value="3">Social and collaborative</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Do you prefer working:</label>
+              <select name="work_preference" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Individually</option>
+                <option value="1">In a team</option>
+                <option value="2">Both equally</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-between mt-4">
+            <button type="button" onclick="prevStep(0)" class="glass px-5 py-2.5 rounded-xl text-gray-400 text-sm font-medium border border-white/10 hover:text-white transition-colors">Back</button>
+            <button type="button" onclick="nextStep(2)" class="btn-predict px-6 py-2.5 rounded-xl text-white text-sm font-medium inline-flex items-center gap-2">
+              <span>Next</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Problem Solving & Learning -->
+        <div class="step-group" id="step-2">
+          <div class="glass-strong rounded-3xl p-7 space-y-5">
+            <h3 class="text-violet-300 text-xs font-semibold uppercase tracking-widest">Problem Solving & Learning</h3>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">How do you usually deal with problems?</label>
+              <select name="problem_solving" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Analyze and solve calmly</option>
+                <option value="1">Ask for help</option>
+                <option value="2">Feel stressed quickly</option>
+                <option value="3">Avoid the problem</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Your preferred learning method?</label>
+              <select name="learning_method" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Reading and understanding</option>
+                <option value="1">Memorization and repetition</option>
+                <option value="2">Practical / application-based learning</option>
+                <option value="3">Watching videos</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-between mt-4">
+            <button type="button" onclick="prevStep(1)" class="glass px-5 py-2.5 rounded-xl text-gray-400 text-sm font-medium border border-white/10 hover:text-white transition-colors">Back</button>
+            <button type="button" onclick="nextStep(3)" class="btn-predict px-6 py-2.5 rounded-xl text-white text-sm font-medium inline-flex items-center gap-2">
+              <span>Next</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 4: Major Engagement -->
+        <div class="step-group" id="step-3">
+          <div class="glass-strong rounded-3xl p-7 space-y-5">
+            <h3 class="text-violet-300 text-xs font-semibold uppercase tracking-widest">Major Engagement</h3>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Do you find your major interesting?</label>
+              <select name="major_interest" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Always</option>
+                <option value="1">Often</option>
+                <option value="2">Sometimes</option>
+                <option value="3">Rarely</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">How do you rate your academic performance?</label>
+              <select name="academic_performance" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Excellent</option>
+                <option value="1">Very good</option>
+                <option value="2">Good</option>
+                <option value="3">Weak</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-between mt-4">
+            <button type="button" onclick="prevStep(2)" class="glass px-5 py-2.5 rounded-xl text-gray-400 text-sm font-medium border border-white/10 hover:text-white transition-colors">Back</button>
+            <button type="button" onclick="nextStep(4)" class="btn-predict px-6 py-2.5 rounded-xl text-white text-sm font-medium inline-flex items-center gap-2">
+              <span>Next</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 5: Future & Choice -->
+        <div class="step-group" id="step-4">
+          <div class="glass-strong rounded-3xl p-7 space-y-5">
+            <h3 class="text-violet-300 text-xs font-semibold uppercase tracking-widest">Future & Choice</h3>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Did you choose your major by your own choice?</label>
+              <select name="major_choice" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Yes</option>
+                <option value="1">Somewhat</option>
+                <option value="2">No</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2">Do you see yourself working in this field in the future?</label>
+              <select name="future_field" class="w-full glass rounded-xl px-4 py-3 text-sm text-gray-200 border border-white/10">
+                <option value="0">Yes</option>
+                <option value="1">Maybe</option>
+                <option value="2">No</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-between mt-4">
+            <button type="button" onclick="prevStep(3)" class="glass px-5 py-2.5 rounded-xl text-gray-400 text-sm font-medium border border-white/10 hover:text-white transition-colors">Back</button>
+            <button type="button" onclick="submitPrediction()" class="btn-predict px-8 py-3 rounded-xl text-white text-sm font-semibold inline-flex items-center gap-2">
+              <span>Get My Result</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="relative z-10"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </form>
+
+      <!-- Loading state -->
+      <div id="loading-state" class="hidden text-center py-16">
+        <div class="mb-4">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <p class="text-gray-400 text-sm">Analyzing your profile…</p>
+      </div>
+
+      <!-- Result -->
+      <div id="result-area" class="hidden fade-up"></div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center py-8 text-xs space-y-1.5">
+    <p class="text-gray-600">Developed and designed by</p>
+    <p class="text-gray-500">Aleen Altamimi &bull; Juody Almohideb &bull; Aljohrah Aldabaan &bull; Wajan Alshahrani</p>
+  </footer>
+
+</div>
+
+<script>
+  let currentStep = 0;
+  const totalSteps = 5;
+
+  function showPage(name, btn) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function updateProgress(step) {
+    document.getElementById('progress-text').textContent = `Step ${step + 1} of ${totalSteps}`;
+    for (let i = 0; i < 10; i++) {
+      const dot = document.getElementById('dot-' + i);
+      dot.classList.toggle('filled', i <= step * 2 + 1);
+    }
+  }
+
+  function nextStep(toStep) {
+    document.getElementById('step-' + currentStep).classList.remove('active');
+    document.getElementById('step-' + toStep).classList.add('active');
+    currentStep = toStep;
+    updateProgress(toStep);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function prevStep(toStep) {
+    document.getElementById('step-' + currentStep).classList.remove('active');
+    document.getElementById('step-' + toStep).classList.add('active');
+    currentStep = toStep;
+    updateProgress(toStep);
+  }
+
+  function getFormValues() {
+    const form = document.getElementById('predict-form');
+    const fd = new FormData(form);
+    return {
+      field_of_study: fd.get('field_of_study'),
+      academic_year: fd.get('academic_year'),
+      personality: fd.get('personality'),
+      work_preference: fd.get('work_preference'),
+      problem_solving: fd.get('problem_solving'),
+      learning_method: fd.get('learning_method'),
+      major_interest: fd.get('major_interest'),
+      academic_performance: fd.get('academic_performance'),
+      major_choice: fd.get('major_choice'),
+      future_field: fd.get('future_field')
+    };
+  }
+
+  const labelMaps = {
+    field_of_study: { "0": "Health", "1": "Technology", "2": "Business/Management", "3": "Humanities", "4": "Other" },
+    academic_year: { "0": "First year", "1": "Second year", "2": "Third year", "3": "Fourth year+" },
+    personality: { "0": "Organized & structured", "1": "Creative & spontaneous", "2": "Analytical & logical", "3": "Social & collaborative" },
+    work_preference: { "0": "Individually", "1": "In a team", "2": "Both equally" },
+    problem_solving: { "0": "Analyze calmly", "1": "Ask for help", "2": "Feel stressed", "3": "Avoid it" },
+    learning_method: { "0": "Reading", "1": "Memorization", "2": "Practical/applied", "3": "Watching videos" },
+    major_interest: { "0": "Always", "1": "Often", "2": "Sometimes", "3": "Rarely" },
+    academic_performance: { "0": "Excellent", "1": "Very good", "2": "Good", "3": "Weak" },
+    major_choice: { "0": "Yes, my own choice", "1": "Somewhat", "2": "No" },
+    future_field: { "0": "Yes", "1": "Maybe", "2": "No" }
+  };
+
+  function determinePrediction(vals) {
+    // Heuristic scoring based on original RandomForest logic
+    let score = 0;
+    const i = {
+      interest: parseInt(vals.major_interest),
+      choice: parseInt(vals.major_choice),
+      future: parseInt(vals.future_field),
+      performance: parseInt(vals.academic_performance),
+      problem: parseInt(vals.problem_solving),
+      personality: parseInt(vals.personality),
+      work: parseInt(vals.work_preference),
+      learning: parseInt(vals.learning_method)
+    };
+    // Interest in major (0=Always → good, 3=Rarely → bad)
+    score += (3 - i.interest) * 2;
+    // Chose own major (0=Yes → good, 2=No → bad)
+    score += (3 - i.choice) * 2;
+    // Future in field (0=Yes → good, 2=No → bad)
+    score += (3 - i.future) * 2;
+    // Academic performance (0=Excellent → good, 3=Weak → bad)
+    score += (3 - i.performance) * 1.5;
+    // Problem solving (0=calm → good, 3=avoid → bad)
+    score += (3 - i.problem) * 1;
+
+    if (score >= 17) return "Suitable";
+    if (score >= 10) return "Neutral";
+    return "Not Suitable";
+  }
+
+  async function submitPrediction() {
+    const vals = getFormValues();
+
+    // Hide form steps, show loading
+    document.getElementById('step-' + currentStep).classList.remove('active');
+    document.getElementById('loading-state').classList.remove('hidden');
+    document.getElementById('result-area').classList.add('hidden');
+
+    // Build readable profile for Claude
+    const profile = Object.entries(vals).map(([k, v]) => `${k}: ${labelMaps[k][v]}`).join('\n');
+    const localPrediction = determinePrediction(vals);
+
+    // Call Claude API for insight
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: `You are MajorFit, an academic personality advisor. A student has answered a compatibility questionnaire. Based on their profile, the model has predicted: "${localPrediction}".
+
+Student profile:
+${profile}
+
+Respond ONLY with a JSON object (no markdown, no backticks) with these exact keys:
+{
+  "verdict": "${localPrediction}",
+  "headline": "A short 5-8 word punchy phrase summarizing the result",
+  "summary": "2-3 sentence explanation of the result, personalized to their answers",
+  "tip": "One concrete, actionable advice sentence for this student"
+}`
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content.map(c => c.text || '').join('');
+      let result;
+      try {
+        result = JSON.parse(text.replace(/```json|```/g, '').trim());
+      } catch {
+        result = {
+          verdict: localPrediction,
+          headline: localPrediction === "Suitable" ? "A strong match found" : localPrediction === "Neutral" ? "A workable path ahead" : "Worth reconsidering your path",
+          summary: "Based on your responses, we've assessed your compatibility with your major.",
+          tip: "Reflect on your academic goals and speak with an academic advisor."
+        };
+      }
+
+      showResult(result);
+    } catch (e) {
+      showResult({
+        verdict: localPrediction,
+        headline: localPrediction === "Suitable" ? "A strong match found" : localPrediction === "Neutral" ? "A workable path ahead" : "Worth reconsidering your path",
+        summary: "Based on your responses, we've assessed your compatibility with your major.",
+        tip: "Reflect on your academic goals and speak with an academic advisor."
+      });
+    }
+  }
+
+  function showResult(result) {
+    document.getElementById('loading-state').classList.add('hidden');
+    const area = document.getElementById('result-area');
+    area.classList.remove('hidden');
+
+    const colors = {
+      "Suitable": { bg: "from-emerald-900/40 to-teal-900/30", border: "border-emerald-500/30", badge: "bg-emerald-500/20 text-emerald-300", icon: "✦", iconColor: "text-emerald-400" },
+      "Neutral":  { bg: "from-amber-900/30 to-orange-900/20", border: "border-amber-500/30", badge: "bg-amber-500/20 text-amber-300", icon: "◈", iconColor: "text-amber-400" },
+      "Not Suitable": { bg: "from-rose-900/30 to-pink-900/20", border: "border-rose-500/30", badge: "bg-rose-500/20 text-rose-300", icon: "◇", iconColor: "text-rose-400" }
+    };
+    const c = colors[result.verdict] || colors["Neutral"];
+
+    area.innerHTML = `
+      <div class="glass-strong rounded-3xl p-8 bg-gradient-to-br ${c.bg} border ${c.border}">
+        <div class="text-center mb-6">
+          <span class="text-4xl ${c.iconColor} pulse-ring inline-block mb-3">${c.icon}</span>
+          <div class="inline-block px-3 py-1 rounded-full text-xs font-semibold ${c.badge} mb-3">${result.verdict.toUpperCase()}</div>
+          <h2 class="serif text-3xl text-white leading-tight">${result.headline}</h2>
+        </div>
+        <div class="space-y-4">
+          <p class="text-gray-300 text-sm leading-relaxed text-center">${result.summary}</p>
+          <div class="glass rounded-2xl p-4 flex items-start gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b7cf8" stroke-width="2" class="flex-shrink-0 mt-0.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <p class="text-gray-300 text-sm leading-relaxed"><span class="text-violet-300 font-medium">Advice:</span> ${result.tip}</p>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-center">
+          <button onclick="resetForm()" class="glass px-6 py-2.5 rounded-xl text-gray-300 text-sm font-medium border border-white/10 hover:text-white hover:border-white/20 transition-all">
+            Try again
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function resetForm() {
+    currentStep = 0;
+    document.querySelectorAll('.step-group').forEach((g, i) => g.classList.toggle('active', i === 0));
+    document.getElementById('result-area').classList.add('hidden');
+    document.getElementById('loading-state').classList.add('hidden');
+    updateProgress(0);
+    // Reset selects
+    document.getElementById('predict-form').reset();
+  }
+</script>
+</body>
+</html>
